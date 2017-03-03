@@ -6,7 +6,8 @@
 #include <signal.h>
 #include <stdio.h>
  
-#define SRUDEBUG  				  							// Check SRU Routings for errors.
+// Check SRU Routings for errors.
+#define SRUDEBUG
 #include <SRU.h>
 
 #define SELECT_SPI_SLAVE(select) (*pSPIFLG &= ~(DS0EN<<8))
@@ -35,31 +36,19 @@
 #define AK4396_LCH_ATT_DEF (0xFF)
 #define AK4396_RCH_ATT_DEF (0xFF)
 
-extern void initPLL_SDRAM(void); 							// Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
+// Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
+extern void initPLL_SDRAM(void);
 
+// local functions
 void initSRU(void);		
-void initPCG(void);
 void initSPI(unsigned int SPI_Flag);
 void configureAK4396Register(unsigned int address, unsigned int data);
 void initDMA(void);
 void testISR(int sig_int);
-void initSignal(void);
+void delay(int times);
 
-static int i = 0, sampleNum = 0;
-
-static int count;
-
-/* variables for interrupt handling */
-static volatile int blockReady = 0, isProcessing = 0;
-
-static int processNum = 0;
-
-
-
-int source[SIGNAL_LENGTH];	// square wave signal
-
-
-int tx0a_buf[2] = {0, 0};									// SPORT0 transmit buffer A
+int rx0a_buf[2] = {0, 0};		// SPORT0 receive buffer a
+int tx1a_buf[2] = {0, 0};		// SPORT1 transmit buffer a
 
 /* TCB format:    ECx (length of destination buffer),
 				  EMx (destination buffer step size),
@@ -71,25 +60,23 @@ int tx0a_buf[2] = {0, 0};									// SPORT0 transmit buffer A
 				  Cx  (length of source buffer),
 				  IMx (source buffer step size),
 				  IIx (source buffer index (initialized to start address))       */
-int tx0a_tcb[8]  = {0, 0, 0, 0, 0, 2, 1, (int) tx0a_buf};				// SPORT0 transmit a tcb for zeros
+int rx0a_tcb[8]  = {0, 0, 0, 0, 0, 2, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
+int tx1a_tcb[8]  = {0, 0, 0, 0, 0, 2, 1, (int) tx1a_buf};				// SPORT1 transmit a tcb to DAC
 
-void main(void) {	
+
+void main(void) {
 	initPLL_SDRAM();
-	
-	initSignal();
-	
+
 	/* schedule the interrupt service routine for when sport0 DMA is done */
 	interrupts(SIG_SP0,testISR);
 
-	initPCG();
 	initSPI(DS0EN);
 	initSRU();
 	
 	//Set the reset so that the device is ready to initialize registers.
 	configureAK4396Register(AK4396_CTRL1, AK4396_CTRL1_RST);
 	
-	for(i=10; i > 0; --i)
-    	asm("nop;");
+	delay(10);
         	
     configureAK4396Register(AK4396_CTRL1, AK4396_CTRL1_DEF);
 	configureAK4396Register(AK4396_CTRL2, AK4396_CTRL2_DEF);
@@ -97,58 +84,45 @@ void main(void) {
 	configureAK4396Register(AK4396_LCH_ATT, AK4396_LCH_ATT_DEF);
 	configureAK4396Register(AK4396_RCH_ATT, AK4396_RCH_ATT_DEF);
 	
-	initDMA(); /** look **/
+	initDMA();
 
-
+	//debug
 	//printf("tx0a_tcb[4] = %x\n", tx0a_tcb[4]);
 	//printf("CPSP0A = %x\n", *pCPSP0A);
 	//printf("tx0a_buf address = %x\n", tx0a_buf);
 
-
 	/* stream the signal to the DAC forever */
-	while(1) {
-
-    }
-}
-
-void initSignal()
-{
-	int i;
-	
-	for (i = 0; i < SIGNAL_LENGTH / 2; i++)
-	{
-		source[i] = HIGHEST;	
-	}
-	
-	for (i = SIGNAL_LENGTH / 2; i < SIGNAL_LENGTH; i++)
-	{
-		source[i] = LOWEST;	
-	}
-	
+	while(1);
 }
 
 void initSRU() {
-		
-	//Power off the DAC
 	
+	// use pin 11 on the board for SPDIF in
+	// this is the pin closest to the power,
+	// in the not-ground row
+	SRU(DAI_PB11_O, DIR_I);
+
+	//Power off the DAC
 	SRU(HIGH, DPI_PBEN04_I);
 	SRU(LOW, DPI_PB04_I);
 	
-	for(i=10; i > 0; --i)
-        	asm("nop;");
+	delay(10);
 	
-	//Attach Main Clocks
+	//Attach Main Clocks from SPDIF receiver
 	
 	//MCLK
-	SRU(PCG_CLKA_O, DAI_PB05_I);
+	//SRU(PCG_CLKA_O, DAI_PB05_I);
+	SRU(DIR_TDMCLK_O, DAI_PB05_I);
 	SRU(HIGH,PBEN05_I);
 	
 	//BICK
-	SRU(PCG_CLKB_O, DAI_PB06_I);
+	//SRU(PCG_CLKB_O, DAI_PB06_I);
+	SRU(DIR_CLK_O, DAI_PB06_I);
 	SRU(HIGH,PBEN06_I);
 	
 	//LRCK
-	SRU(PCG_CLKC_O, DAI_PB03_I);
+	//SRU(PCG_CLKC_O, DAI_PB03_I);
+	SRU(DIR_FS_O, DAI_PB03_I);
 	SRU(HIGH,PBEN03_I);
 	
 	//CSN
@@ -162,61 +136,24 @@ void initSRU() {
 	//Send SPI clock to DPI 3
 	SRU(SPI_CLK_O, DPI_PB03_I);
 	SRU(SPI_CLK_PBEN_O, DPI_PBEN03_I);
-
-	// send spi clock out to DPI 11, which is an available pin on the dev board
-	// connect DPI 11 to DAI 09, which is another available pin on the dev board
-	// internally connect DAI 09 to DAI 07, which is hardwired to the CCLK pin
-	// on the dac
-	//SRU(SPI_CLK_O, DPI_PB11_I);
-	//SRU(SPI_CLK_PBEN_O, DPI_PBEN11_I);
-	//SRU(DAI_PB09_O, DAI_PB07_I);
-	//SRU(LOW, PBEN09_I);
-	//SRU(LOW, DAI_PB09_I);
-	//SRU(HIGH, PBEN07_I);
-	
-	SRU(SPI_MOSI_PBEN_O, DPI_PBEN10_I);
-	SRU(SPI_MOSI_O, DPI_PB10_I);
-	
-	//SRU(PCG_CLKC_O, DAI_PB12_I);
-	//SRU(HIGH,PBEN12_I);
-	
-	//SRU(SPI_FLG0_PBEN_O, DPI_PBEN10_I);
-	//SRU(SPI_FLG0_O, DPI_PB10_I);
-	
-	
-	//SRU(SPI_CLK_O, DAI_PB07_I);
-	//SRU(HIGH, PBEN07_I);            //Set CCLK clock to output
 	
 	//Power back on the DAC
-	
 	SRU(HIGH, DPI_PB04_I);
 	
-	for(i=10; i > 0; --i)
-        	asm("nop;");
+	delay(10);
 	
-	SRU(PCG_CLKB_O, SPORT0_CLK_I);	// BICK is clock for SPORT0
+	//SRU(PCG_CLKB_O, SPORT0_CLK_I);	// BICK is clock for SPORT0
+	SRU(DAI_PB06_O, SPORT0_CLK_I);
+	SRU(DAI_PB06_O, SPORT1_CLK_I);
 	SRU(DAI_PB03_O, SPORT0_FS_I);
+	SRU(DAI_PB03_O, SPORT1_FS_I);
 
-	SRU(SPORT0_DA_O, DAI_PB04_I);
+	// SPORT0 receives from SPDIF
+	SRU(DIR_DAT_O, SPORT0_DA_I);
+
+	// SPORT1 outputs to the DAC
+	SRU(SPORT1_DA_O, DAI_PB04_I);
 	SRU(HIGH, PBEN04_I);
-	
-}
-
-void initPCG(void)							// Precision Clock Generator Initialization
-{
-	//CLKIN = 24.576 MHz (25MHz)
-	
-	//MCLK
-	*pPCG_CTLA1 = 0; // CLKADIV = 1, full 25 MHz
-	*pPCG_CTLA0 = ENCLKA;
-	
-	//BICK
-	*pPCG_CTLB1 = 8; // CLKBDIV = 8
-	*pPCG_CTLB0 = ENCLKB;
-	
-	//LRCK
-	*pPCG_CTLC1 = 512; // CLKCDIV = 512, for 48 kHz
-	*pPCG_CTLC0 = ENCLKC;
 	
 }
 
@@ -252,18 +189,13 @@ void initSPI(unsigned int SPI_Flag)
 
 void configureAK4396Register(unsigned int address, unsigned int data)
 {
-    int i,j;
     unsigned int message = 0;
 
     SELECT_SPI_SLAVE(DS0EN);
 
     ///MSB                                LSB
     //[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
-    
-    //Chip Address (stay at 0 as per diagram).
-    //message[0]= 0;
-    //message[1]= 0;
-    
+
     //Read/Write (stay at 1, write only, as per diagram).
     message |= 0x2000; //message[3]
     
@@ -272,20 +204,15 @@ void configureAK4396Register(unsigned int address, unsigned int data)
         
     message |= data;
     
-    j=0;
     *pTXSPI = message;
-   // Delay(136);
+
     //Wait for the SPI to indicate that it has finished.
     while ((*pSPISTAT & TXS))
-    {j++;} 
 
-    j=0;
     //Wait for the SPI to indicate that it has finished.
     while (!(*pSPISTAT & SPIFE))
-    {j++;}
     
-    for(i=10; i > 0; --i)
-        	asm("nop;");
+	delay(10);
 
     DESELECT_SPI_SLAVE(DS0EN);
 
@@ -294,26 +221,42 @@ void configureAK4396Register(unsigned int address, unsigned int data)
 void initDMA() {
 
 	*pSPMCTL0 = 0; // ******* ONLY SET ONCE 
-		
-	*pSPCTL0 = 0;
+	*pSPMCTL1 = 0;
 	
-	tx0a_tcb[4] = *pCPSP0A = ((int) tx0a_tcb  + 7) & 0x7FFFF | (1<<19);
+	*pSPCTL0 = 0;
+	*pSPCTL1 = 0;
+
+	rx0a_tcb[4] = *pCPSP0A = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
+	tx1a_tcb[4] = *pCPSP1A = ((int) rx0a_tcb  + 7) & 0x7FFFF | (1<<19);
 
 	//*pCPSP0A = ((int) tx0a_tcb + 7) & 0x7FFFF;
 	
-	*pSPCTL0 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN;			// Configure the SPORT control register
-	
-	*pSPCTLN0 |= (1 << 1);
+	// SPORT0 as receiver
+	*pSPCTL0 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A;
+
+	// SPORT1 as transmitter
+	*pSPCTL1 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN;			// Configure the SPORT control register
+	//*pSPCTLN0 |= (1 << 1);
 }
 
+/* 
+ * once we have received new SPDIF data into SPORT0,
+ * transfer it to the SPORT1 transmit buffer to the DAC
+ */
 void testISR(int sig_int)
 {
 	//printf("processing time %d\n", processNum);
-	processNum++;
 
-	tx0a_buf[0] = source[sampleNum];
-	tx0a_buf[1] = source[sampleNum];
+	tx1a_buf[0] = rx0a_buf[0];
+	tx1a_buf[1] = rx0a_buf[1];
 	
-	sampleNum++;
-	sampleNum %= SIGNAL_LENGTH;
+	printf("tx1a_buf is %x\n", tx1a_buf[0]);
+}
+
+void delay(int times)
+{
+	int i;
+
+    for(i = times; i > 0; --i)
+    	asm("nop;");
 }
