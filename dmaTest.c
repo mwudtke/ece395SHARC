@@ -45,7 +45,12 @@ void initSPI(unsigned int SPI_Flag);
 void configureAK4396Register(unsigned int address, unsigned int data);
 void initDMA(void);
 void testISR(int sig_int);
+void initSPDIF(void);
+
 void delay(int times);
+
+int source[SIGNAL_LENGTH];	// square wave signal
+int sampleNum = 0;
 
 int rx0a_buf[2] = {0, 0};		// SPORT0 receive buffer a
 int tx1a_buf[2] = {0, 0};		// SPORT1 transmit buffer a
@@ -72,7 +77,7 @@ void main(void) {
 
 	initSPI(DS0EN);
 	initSRU();
-	
+
 	//Set the reset so that the device is ready to initialize registers.
 	configureAK4396Register(AK4396_CTRL1, AK4396_CTRL1_RST);
 	
@@ -86,6 +91,8 @@ void main(void) {
 	
 	initDMA();
 
+	initSPDIF();
+
 	//debug
 	//printf("tx0a_tcb[4] = %x\n", tx0a_tcb[4]);
 	//printf("CPSP0A = %x\n", *pCPSP0A);
@@ -93,14 +100,31 @@ void main(void) {
 
 	/* stream the signal to the DAC forever */
 	while(1);
+		//printf("rx0a_buf is %x\n", rx0a_buf[0]); 
 }
+
+void initSPDIF()
+{
+    // SPDIF Setup code goes here
+    // Use default setting of SPDIF
+    *pDIRCTL=0x0;
+    
+}
+
 
 void initSRU() {
 	
 	// use pin 11 on the board for SPDIF in
 	// this is the pin closest to the power,
 	// in the not-ground row
-	SRU(DAI_PB11_O, DIR_I);
+	SRU(DAI_PB12_O, DIR_I);
+	SRU(LOW, PBEN12_I);
+	SRU(LOW, DAI_PB12_I);
+
+	// debug - hopefully see the biphase encoded stream
+	// on pin 11
+	//SRU(DAI_PB12_O, DAI_PB11_I);
+	//SRU(HIGH, PBEN11_I);
 
 	//Power off the DAC
 	SRU(HIGH, DPI_PBEN04_I);
@@ -148,13 +172,15 @@ void initSRU() {
 	SRU(DAI_PB03_O, SPORT0_FS_I);
 	SRU(DAI_PB03_O, SPORT1_FS_I);
 
-	// SPORT0 receives from SPDIF
+	// SPORT0 receives from SPDIF (comment back in to test talkthrough)
 	SRU(DIR_DAT_O, SPORT0_DA_I);
 
-	// SPORT1 outputs to the DAC
+	// SPORT1 outputs to the DAC (comment back in to test talkthrough)
 	SRU(SPORT1_DA_O, DAI_PB04_I);
 	SRU(HIGH, PBEN04_I);
-	
+
+	SRU(DAI_PB05_O, DAI_PB11_I);
+	SRU(HIGH, PBEN11_I);
 }
 
 // Serial Peripheral Interface Initialization
@@ -226,12 +252,11 @@ void initDMA() {
 	*pSPCTL0 = 0;
 	*pSPCTL1 = 0;
 
+	//comment back in to test sport talkthrough
 	rx0a_tcb[4] = *pCPSP0A = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
 	tx1a_tcb[4] = *pCPSP1A = ((int) rx0a_tcb  + 7) & 0x7FFFF | (1<<19);
-
-	//*pCPSP0A = ((int) tx0a_tcb + 7) & 0x7FFFF;
 	
-	// SPORT0 as receiver
+	// SPORT0 as receiver (SPTRAN for testing square wave)
 	*pSPCTL0 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A;
 
 	// SPORT1 as transmitter
@@ -249,8 +274,6 @@ void testISR(int sig_int)
 
 	tx1a_buf[0] = rx0a_buf[0];
 	tx1a_buf[1] = rx0a_buf[1];
-	
-	printf("tx1a_buf is %x\n", tx1a_buf[0]);
 }
 
 void delay(int times)
