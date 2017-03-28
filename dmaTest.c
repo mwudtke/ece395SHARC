@@ -27,10 +27,10 @@
 #define AK4396_RCH_ATT (0x04)
 
 // Reset CTRL1 setting
-#define AK4396_CTRL1_RST   (0x86)
+#define AK4396_CTRL1_RST   (0x06)
 
 // Default settings
-#define AK4396_CTRL1_DEF   (0x87)
+#define AK4396_CTRL1_DEF   (0x07)
 #define AK4396_CTRL2_DEF   (0x02)
 #define AK4396_CTRL3_DEF   (0x00)
 #define AK4396_LCH_ATT_DEF (0xFF)
@@ -40,12 +40,13 @@
 extern void initPLL_SDRAM(void);
 
 // local functions
-void initSRU(void);		
+void initSRU(void);
 void initSPI(unsigned int SPI_Flag);
 void configureAK4396Register(unsigned int address, unsigned int data);
 void initDMA(void);
 void testISR(int sig_int);
 void initSPDIF(void);
+void clearDAIpins(void);
 
 void delay(int times);
 
@@ -73,22 +74,23 @@ void main(void) {
 	initPLL_SDRAM();
 
 	/* schedule the interrupt service routine for when sport0 DMA is done */
-	interrupts(SIG_SP0,testISR);
+	//interrupts(SIG_SP0,testISR);
 
 	initSPI(DS0EN);
 	initSRU();
 
+	configureAK4396Register(AK4396_CTRL2, AK4396_CTRL2_DEF);
+	
 	//Set the reset so that the device is ready to initialize registers.
 	configureAK4396Register(AK4396_CTRL1, AK4396_CTRL1_RST);
 	
 	delay(10);
         	
     configureAK4396Register(AK4396_CTRL1, AK4396_CTRL1_DEF);
-	configureAK4396Register(AK4396_CTRL2, AK4396_CTRL2_DEF);
 	configureAK4396Register(AK4396_CTRL3, AK4396_CTRL3_DEF);
 	configureAK4396Register(AK4396_LCH_ATT, AK4396_LCH_ATT_DEF);
 	configureAK4396Register(AK4396_RCH_ATT, AK4396_RCH_ATT_DEF);
-	
+
 	initDMA();
 
 	initSPDIF();
@@ -99,8 +101,12 @@ void main(void) {
 	//printf("tx0a_buf address = %x\n", tx0a_buf);
 
 	/* stream the signal to the DAC forever */
-	while(1);
-		//printf("rx0a_buf is %x\n", rx0a_buf[0]); 
+	while(1){
+            //configureAK4396Register(AK4396_CTRL3, AK4396_CTRL2_DEF);
+           //delay(1000);
+
+		//printf("DIRSTAT is %x\n", *pDIRSTAT); 
+    }
 }
 
 void initSPDIF()
@@ -113,13 +119,15 @@ void initSPDIF()
 
 
 void initSRU() {
+
+	clearDAIpins();
 	
 	// use pin 11 on the board for SPDIF in
 	// this is the pin closest to the power,
 	// in the not-ground row
-	SRU(DAI_PB12_O, DIR_I);
-	SRU(LOW, PBEN12_I);
 	SRU(LOW, DAI_PB12_I);
+	SRU(LOW, PBEN12_I);
+	SRU(DAI_PB12_O, DIR_I);
 
 	// debug - hopefully see the biphase encoded stream
 	// on pin 11
@@ -127,8 +135,8 @@ void initSRU() {
 	//SRU(HIGH, PBEN11_I);
 
 	//Power off the DAC
-	SRU(HIGH, DPI_PBEN04_I);
-	SRU(LOW, DPI_PB04_I);
+	SRU2(HIGH, DPI_PBEN04_I);
+	SRU2(LOW, DPI_PB04_I);
 	
 	delay(10);
 	
@@ -150,22 +158,24 @@ void initSRU() {
 	SRU(HIGH,PBEN03_I);
 	
 	//CSN
-	SRU(SPI_FLG0_PBEN_O, DPI_PBEN07_I);
-	SRU(SPI_FLG0_O, DPI_PB07_I);
+	SRU2(SPI_FLG0_O, DPI_PB07_I);
+    SRU2(SPI_FLG0_PBEN_O, DPI_PBEN07_I);
+    //SRU2(HIGH, DPI_PBEN07_I);
 	
 	//Set MOSI/CDT1 to output
-	SRU(SPI_MOSI_O, DPI_PB01_I);
-	SRU(HIGH, DPI_PBEN01_I);
+	SRU2(SPI_MOSI_O, DPI_PB01_I);
+	SRU2(HIGH, DPI_PBEN01_I);
 	
 	//Send SPI clock to DPI 3
-	SRU(SPI_CLK_O, DPI_PB03_I);
-	SRU(SPI_CLK_PBEN_O, DPI_PBEN03_I);
+	SRU2(SPI_CLK_O, DPI_PB03_I);
+	SRU2(SPI_CLK_PBEN_O, DPI_PBEN03_I);
+    //SRU2(HIGH, DPI_PBEN03_I);
 	
 	//Power back on the DAC
-	SRU(HIGH, DPI_PB04_I);
-	
+	SRU2(HIGH, DPI_PB04_I);
+
 	delay(10);
-	
+
 	//SRU(PCG_CLKB_O, SPORT0_CLK_I);	// BICK is clock for SPORT0
 	SRU(DAI_PB06_O, SPORT0_CLK_I);
 	SRU(DAI_PB06_O, SPORT1_CLK_I);
@@ -179,8 +189,13 @@ void initSRU() {
 	SRU(SPORT1_DA_O, DAI_PB04_I);
 	SRU(HIGH, PBEN04_I);
 
-	SRU(DAI_PB05_O, DAI_PB11_I);
+	// LRCLK to debug, pin 11
+	SRU(DAI_PB03_O, DAI_PB11_I);
 	SRU(HIGH, PBEN11_I);
+
+    SRU2(SPI_MOSI_O, DPI_PB09_I);
+    SRU2(HIGH, DPI_PBEN09_I);
+
 }
 
 // Serial Peripheral Interface Initialization
@@ -215,7 +230,7 @@ void initSPI(unsigned int SPI_Flag)
 
 void configureAK4396Register(unsigned int address, unsigned int data)
 {
-    unsigned int message = 0;
+    unsigned short message = 0;
 
     SELECT_SPI_SLAVE(DS0EN);
 
@@ -239,7 +254,7 @@ void configureAK4396Register(unsigned int address, unsigned int data)
     while (!(*pSPISTAT & SPIFE))
     
 	delay(10);
-
+    
     DESELECT_SPI_SLAVE(DS0EN);
 
 }
@@ -282,4 +297,60 @@ void delay(int times)
 
     for(i = times; i > 0; --i)
     	asm("nop;");
+}
+
+void clearDAIpins(void)
+{
+//------------------------------------------------------------------------
+//  Tie the pin buffer inputs LOW for all DAI pins.  Even though
+//    these pins are inputs to the SHARC, tying unused pin buffer inputs
+//    LOW is "good coding style" to eliminate the possibility of
+//    termination artifacts internal to the IC.  Note that signal
+//    integrity is degraded only with a few specific SRU combinations.
+//    In practice, this occurs VERY rarely, and these connections are
+//    typically unnecessary.  This is GROUP D
+    SRU(LOW, DAI_PB01_I);
+    SRU(LOW, DAI_PB02_I);
+    SRU(LOW, DAI_PB03_I);
+    SRU(LOW, DAI_PB04_I);
+    SRU(LOW, DAI_PB05_I);
+    SRU(LOW, DAI_PB06_I);
+    SRU(LOW, DAI_PB07_I);
+    SRU(LOW, DAI_PB08_I);
+    SRU(LOW, DAI_PB09_I);
+    SRU(LOW, DAI_PB10_I);
+    SRU(LOW, DAI_PB11_I);
+    SRU(LOW, DAI_PB12_I);
+    SRU(LOW, DAI_PB13_I);
+    SRU(LOW, DAI_PB14_I);
+    SRU(LOW, DAI_PB15_I);
+    SRU(LOW, DAI_PB16_I);
+    SRU(LOW, DAI_PB17_I);
+    SRU(LOW, DAI_PB18_I);
+    SRU(LOW, DAI_PB19_I);
+    SRU(LOW, DAI_PB20_I);
+
+//------------------------------------------------------------------------
+//  Tie the pin buffer enable inputs LOW for all DAI pins so
+//  that they are always input pins.  This is GROUP F.
+    SRU(LOW, PBEN01_I);
+    SRU(LOW, PBEN02_I);
+    SRU(LOW, PBEN03_I);
+    SRU(LOW, PBEN04_I);
+    SRU(LOW, PBEN05_I);
+    SRU(LOW, PBEN06_I);
+    SRU(LOW, PBEN07_I);
+    SRU(LOW, PBEN08_I);
+    SRU(LOW, PBEN09_I);
+    SRU(LOW, PBEN10_I);
+    SRU(LOW, PBEN11_I);
+    SRU(LOW, PBEN12_I);
+    SRU(LOW, PBEN13_I);
+    SRU(LOW, PBEN14_I);
+    SRU(LOW, PBEN15_I);
+    SRU(LOW, PBEN16_I);
+    SRU(LOW, PBEN17_I);
+    SRU(LOW, PBEN18_I);
+    SRU(LOW, PBEN19_I);
+    SRU(LOW, PBEN20_I);
 }
