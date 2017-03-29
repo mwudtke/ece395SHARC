@@ -32,6 +32,8 @@
 #define AK4396_LCH_ATT_DEF (0xFF)
 #define AK4396_RCH_ATT_DEF (0xFF)
 
+#define BUFFER_LENGTH 512
+
 // Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
 extern void initPLL_SDRAM(void);
 
@@ -45,7 +47,7 @@ void clearDAIpins(void);
 
 void delay(int times);
 
-int rx0a_buf[256] = {0};		// SPORT0 receive buffer a - also used for transmission
+int rx0a_buf[BUFFER_LENGTH] = {0};		// SPORT0 receive buffer a - also used for transmission
 
 /* TCB format:    ECx (length of destination buffer),
 				  EMx (destination buffer step size),
@@ -57,8 +59,8 @@ int rx0a_buf[256] = {0};		// SPORT0 receive buffer a - also used for transmissio
 				  Cx  (length of source buffer),
 				  IMx (source buffer step size),
 				  IIx (source buffer index (initialized to start address))       */
-int rx0a_tcb[8]  = {0, 0, 0, 0, 0, 256, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
-int tx1a_tcb[8]  = {0, 0, 0, 0, 0, 256, 1, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
+int rx0a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
+int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
 
 
 void main(void) {
@@ -246,15 +248,14 @@ void initDMA() {
 	*pSPCTL1 = 0;
 
 	//comment back in to test sport talkthrough
-	rx0a_tcb[4] = *pCPSP0A = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
-	tx1a_tcb[4] = *pCPSP1A = ((int) rx0a_tcb  + 7) & 0x7FFFF | (1<<19);
+	rx0a_tcb[4] = *pCPSP0A = ((int) rx0a_tcb  + 7) & 0x7FFFF | (1<<19);
+	tx1a_tcb[4] = *pCPSP1A = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
 	
 	// SPORT0 as receiver (SPTRAN for testing square wave)
 	*pSPCTL0 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A;
 
 	// SPORT1 as transmitter
 	*pSPCTL1 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN;			// Configure the SPORT control register
-	//*pSPCTLN0 |= (1 << 1);
 }
 
 void delay(int times)
