@@ -48,7 +48,7 @@ void clearDAIpins(void);
 void delay(int times);
 
 int rx0a_buf[BUFFER_LENGTH] = {0};		// SPORT0 receive buffer a - also used for transmission
-
+int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 /* TCB format:    ECx (length of destination buffer),
 				  EMx (destination buffer step size),
 				  EIx (destination buffer index (initialized to start address)),
@@ -61,6 +61,8 @@ int rx0a_buf[BUFFER_LENGTH] = {0};		// SPORT0 receive buffer a - also used for t
 				  IIx (source buffer index (initialized to start address))       */
 int rx0a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
 int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
+
+int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
 
 void main(void) {
@@ -93,7 +95,7 @@ void main(void) {
 	initSPDIF();
 
 	/* stream the signal to the DAC forever */
-	while(1){}
+	while(1){}  
 }
 
 void initSPDIF()
@@ -249,8 +251,10 @@ void initDMA() {
 
 	//comment back in to test sport talkthrough
 	rx0a_tcb[4] = *pCPSP0A = ((int) rx0a_tcb  + 7) & 0x7FFFF | (1<<19);
-	tx1a_tcb[4] = *pCPSP1A = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
-	
+	tx1a_tcb[4] = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
+	tx1a_delay_tcb[4] = *pCPSP1A = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
+
+
 	// SPORT0 as receiver (SPTRAN for testing square wave)
 	*pSPCTL0 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A;
 
