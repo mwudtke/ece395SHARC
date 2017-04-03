@@ -33,6 +33,7 @@
 #define AK4396_RCH_ATT_DEF (0xFF)
 
 #define BUFFER_LENGTH 512
+#define BUFFER_MASK 0x000000FF
 
 // Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
 extern void initPLL_SDRAM(void);
@@ -44,6 +45,7 @@ void configureAK4396Register(unsigned int address, unsigned int data);
 void initDMA(void);
 void initSPDIF(void);
 void clearDAIpins(void);
+void processSamples(void);
 
 void delay(int times);
 
@@ -64,6 +66,7 @@ int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPOR
 
 int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
+int dsp = 0;
 
 void main(void) {
 	initPLL_SDRAM();
@@ -95,7 +98,9 @@ void main(void) {
 	initSPDIF();
 
 	/* stream the signal to the DAC forever */
-	while(1){}  
+	while(1){
+		processSamples();
+	}  
 }
 
 void initSPDIF()
@@ -324,4 +329,19 @@ void clearDAIpins(void)
     SRU(LOW, PBEN18_I);
     SRU(LOW, PBEN19_I);
     SRU(LOW, PBEN20_I);
+}
+
+
+void processSamples() {
+
+	
+
+	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
+
+		rx0a_buf[dsp] ^= 0x80000000;
+
+    	dsp = (dsp + 1)%512;
+	}
+
+    return;
 }
