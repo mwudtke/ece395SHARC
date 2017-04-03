@@ -35,6 +35,8 @@
 #define BUFFER_LENGTH 512
 #define BUFFER_MASK 0x000000FF
 
+#define DELAY_LENGTH 1024
+
 // Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
 extern void initPLL_SDRAM(void);
 
@@ -67,6 +69,8 @@ int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPOR
 int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
 int dsp = 0;
+int delay_ptr = DELAY_LENGTH;
+int delay_buffer[2*DELAY_LENGTH] = {0};
 
 void main(void) {
 	initPLL_SDRAM();
@@ -334,14 +338,26 @@ void clearDAIpins(void)
 
 void processSamples() {
 
-	
+
+
+
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
 
+		int index = 0;
+
+		delay_buffer[delay_ptr] = rx0a_buf[dsp];
+
+		if ( (index = delay_ptr - DELAY_LENGTH) < 0 )
+		{
+			index += 2*DELAY_LENGTH;
+		}
+		rx0a_buf[dsp] += delay_buffer[index];
+
 		rx0a_buf[dsp] ^= 0x80000000;
 
+		delay_ptr = (delay_ptr + 1)%DELAY_LENGTH;
     	dsp = (dsp + 1)%512;
 	}
-
     return;
 }
