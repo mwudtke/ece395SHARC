@@ -35,7 +35,7 @@
 #define BUFFER_LENGTH 512
 #define BUFFER_MASK 0x000000FF
 
-#define DELAY_LENGTH 1024
+#define DELAY_LENGTH 12000
 
 // Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
 extern void initPLL_SDRAM(void);
@@ -69,7 +69,7 @@ int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPOR
 int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
 int dsp = 0;
-int delay_ptr = DELAY_LENGTH;
+int delay_ptr = 0;
 int delay_buffer[2*DELAY_LENGTH] = {0};
 
 void main(void) {
@@ -338,26 +338,32 @@ void clearDAIpins(void)
 
 void processSamples() {
 
-
-
+	int tempInt = 0;
+	float tempFloat = 0.0;
 
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
 
-		int index = 0;
+		/* move to after the delay buffer filling for feedback delay */
+		delay_buffer[delay_ptr] = rx0a_buf[dsp];		// fill up the delay buffer
 
-		delay_buffer[delay_ptr] = rx0a_buf[dsp];
+		/*  
+		delay_ptr is putting what rx just took in into the delay_buffer.
+		once the delay length is satisfied, dsp pointer is adding to the receive buffer what rx
+		already put there PLUS what's just ahead of where delay_ptr is now. this way, 
+		the desired delay time is satisfied constantly.
+		*/
+		delay_ptr = (delay_ptr + 1)%DELAY_LENGTH;
+		rx0a_buf[dsp] += delay_buffer[ delay_ptr ];
 
-		if ( (index = delay_ptr - DELAY_LENGTH) < 0 )
-		{
-			index += 2*DELAY_LENGTH;
-		}
-		rx0a_buf[dsp] += delay_buffer[index];
+		//temp = (float)rx0a_buf[dsp] + 0.5f*(float)delay_buffer[ (delay_ptr+1)%DELAY_LENGTH ];	
+		
+		//rx0a_buf[dsp] = (int)temp;
 
+		/* flip the bit to get the DAC working right */
 		rx0a_buf[dsp] ^= 0x80000000;
 
-		delay_ptr = (delay_ptr + 1)%DELAY_LENGTH;
-    	dsp = (dsp + 1)%512;
+    	dsp = (dsp + 1)%512;                            // increment the buffer_ptr
 	}
     return;
 }
