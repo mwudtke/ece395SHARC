@@ -345,7 +345,6 @@ void processSamples() {
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
 
 		/* move to after the delay buffer filling for feedback delay */
-		delay_buffer[delay_ptr] = rx0a_buf[dsp];		// fill up the delay buffer
 
 		/*  
 		delay_ptr is putting what rx just took in into the delay_buffer.
@@ -355,6 +354,18 @@ void processSamples() {
 		*/
 		delay_ptr = (delay_ptr + 1)%DELAY_LENGTH;
 		rx0a_buf[dsp] += delay_buffer[ delay_ptr ];
+
+		tempInt = (rx0a_buf[dsp] & 0xFFFFFF00) >> 8;
+
+		tempInt *= 0.5;
+
+		tempInt <<= 8;
+
+		rx0a_buf[dsp] &= 0x000000FF;
+
+		rx0a_buf[dsp] |= (tempInt & 0xFFFFFF00);
+
+		delay_buffer[delay_ptr] = rx0a_buf[dsp];		// fill up the delay buffer
 
 		//temp = (float)rx0a_buf[dsp] + 0.5f*(float)delay_buffer[ (delay_ptr+1)%DELAY_LENGTH ];	
 		
