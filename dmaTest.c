@@ -337,39 +337,26 @@ void clearDAIpins(void)
 
 
 void processSamples() {
-
+	int index = 0;
 	int tempInt = 0;
-	float tempFloat = 0.0;
-
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
 
-		/* move to after the delay buffer filling for feedback delay */
+		/* one delay length behind is one spot ahead of delay_ptr in delay buffer */
+		index = (delay_ptr + 1) % DELAY_LENGTH;		
 
-		/*  
-		delay_ptr is putting what rx just took in into the delay_buffer.
-		once the delay length is satisfied, dsp pointer is adding to the receive buffer what rx
-		already put there PLUS what's just ahead of where delay_ptr is now. this way, 
-		the desired delay time is satisfied constantly.
-		*/
-		delay_ptr = (delay_ptr + 1)%DELAY_LENGTH;
-		rx0a_buf[dsp] += delay_buffer[ delay_ptr ];
+		tempInt = (delay_buffer[index] & 0xFFFFFF00) >> 8; 
+		tempInt = 1*tempInt;							   
+		tempInt = (tempInt & 0xFFFFFFFF) << 8;									   
+		delay_buffer[index] = (rx0a_buf[dsp] & 0x000000FF) | (tempInt & 0xFFFFFF00);
 
-		tempInt = (rx0a_buf[dsp] & 0xFFFFFF00) >> 8;
+		/* set up for tx pointer to read what rx put there plus what dsp put into delay buffer */
+		rx0a_buf[dsp] += delay_buffer[index];	 
 
-		tempInt *= 0.5;
+		/* next delay buffer spot is current rx spot + delay buffer spot from one delay ago */
+		delay_buffer[delay_ptr] = rx0a_buf[dsp];	   
 
-		tempInt <<= 8;
-
-		rx0a_buf[dsp] &= 0x000000FF;
-
-		rx0a_buf[dsp] |= (tempInt & 0xFFFFFF00);
-
-		delay_buffer[delay_ptr] = rx0a_buf[dsp];		// fill up the delay buffer
-
-		//temp = (float)rx0a_buf[dsp] + 0.5f*(float)delay_buffer[ (delay_ptr+1)%DELAY_LENGTH ];	
-		
-		//rx0a_buf[dsp] = (int)temp;
+		delay_ptr = (delay_ptr + 1)%DELAY_LENGTH;       // increment delay_ptr
 
 		/* flip the bit to get the DAC working right */
 		rx0a_buf[dsp] ^= 0x80000000;
@@ -378,3 +365,23 @@ void processSamples() {
 	}
     return;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		/*  
+		delay_ptr is putting into the delay_buffer what rx just took in.
+		once the delay length is satisfied, dsp pointer will add the stored delay
+		to what rx already put there. this way, the desired delay time is satisfied constantly.
+		*/
+		
