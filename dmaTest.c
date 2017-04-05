@@ -34,6 +34,8 @@
 
 #define BUFFER_LENGTH 512
 #define BUFFER_MASK 0x000000FF
+#define LRCK_DIVIDER 1024				// 24 kHz sampling freq
+#define BICK_DIVIDER LRCK_DIVIDER/64
 
 // Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
 extern void initPLL_SDRAM(void);
@@ -46,6 +48,7 @@ void initDMA(void);
 void initSPDIF(void);
 void clearDAIpins(void);
 void initSRC(void);
+void initPCG(void);
 void processSamples(void);
 
 void delay(int times);
@@ -98,6 +101,9 @@ void main(void) {
 
 	initSPDIF();
 
+	initPCG();
+	
+	initSRC();
 	/* stream the signal to the DAC forever */
 	while(1){
 		processSamples();
@@ -162,16 +168,33 @@ void initSRU() {
 
 	delay(10);
 
+	// DAI_PB06 is DIR bit clock
 	SRU(DAI_PB06_O, SPORT0_CLK_I);
 	SRU(DAI_PB06_O, SPORT1_CLK_I);
+	// DAI_PB03 is DIR frame sync
 	SRU(DAI_PB03_O, SPORT0_FS_I);
 	SRU(DAI_PB03_O, SPORT1_FS_I);
 
-	// SPORT0 receives from SPDIF (comment back in to test talkthrough)
+	// Connect bit clock to SRC0
+    SRU(DAI_PB06_O, SRC0_CLK_IP_I);
+    // Connect frame sync to SRC0
+    SRU(DAI_PB03_O, SRC0_FS_IP_I);
+
+    // Connect output clocks to SRC0
+    SRU(PCG_CLKA_O, SRC0_CLK_OP_I);		//BICK
+
+    SRU(PCG_CLKB_O, DAI_PB02_I);		//LRCK
+    SRU(HIGH, PBEN02_I);
+    SRU(DAI_PB02_O, SRC0_FS_OP_I);
+
+	// SPORT0 receives from SPDIF
 	SRU(DIR_DAT_O, SPORT0_DA_I);
 
-	// SPORT1 outputs to the DAC (comment back in to test talkthrough)
-	SRU(SPORT1_DA_O, DAI_PB04_I);
+	// SPORT1 outputs to the SRC0
+	SRU(SPORT1_DA_O, SRC0_DAT_IP_I);
+
+	// SRC0 outputs to the DAC
+	SRU(SRC0_DAT_OP_O, DAI_PB04_I);
 	SRU(HIGH, PBEN04_I);
 
 	
@@ -346,10 +369,24 @@ void initSRC(void)
     //------------------------------------------------------------
 
 
-	*pSRCCTL0 = SRC1_IN_I2S | SRC1_OUT_I2S | SRC1_OUT_24;
+	*pSRCCTL0 = SRC0_IN_I2S | SRC0_OUT_I2S | SRC0_OUT_24;
 
 	// Enable SRC1 in a different cycle than setting the configuration
-	*pSRCCTL0 |= SRC1_ENABLE;
+	*pSRCCTL0 |= SRC0_ENABLE;
+}
+
+// Precision Clock Generator Initialization
+void initPCG(void)
+{
+	//CLKIN = 24.576 MHz (25MHz)
+	
+	//BICK
+	*pPCG_CTLA1 = BICK_DIVIDER;
+	*pPCG_CTLA0 = ENCLKA;
+	
+	//LRCK
+	*pPCG_CTLB1 = LRCK_DIVIDER;
+	*pPCG_CTLB0 = ENCLKB;
 }
 
 void processSamples() {
