@@ -34,8 +34,9 @@
 
 #define BUFFER_LENGTH 512
 #define BUFFER_MASK 0x000000FF
-#define LRCK_DIVIDER 1024				// 24 kHz sampling freq
+#define LRCK_DIVIDER 512				// 24 kHz sampling freq
 #define BICK_DIVIDER LRCK_DIVIDER/64
+#define MCLK_DIVIDER LRCK_DIVIDER/256
 
 // Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
 extern void initPLL_SDRAM(void);
@@ -139,15 +140,18 @@ void initSRU() {
 	//Attach Main Clocks from SPDIF receiver
 	
 	//MCLK
-	SRU(DIR_TDMCLK_O, DAI_PB05_I);
+//	SRU(DIR_TDMCLK_O, DAI_PB05_I);
+    SRU(PCG_CLKC_O, DAI_PB05_I);
 	SRU(HIGH,PBEN05_I);
 	
 	//BICK
-	SRU(DIR_CLK_O, DAI_PB06_I);
+//	SRU(DIR_CLK_O, DAI_PB06_I);
+    SRU(PCG_CLKA_O, DAI_PB06_I);
 	SRU(HIGH,PBEN06_I);
 	
 	//LRCK
-	SRU(DIR_FS_O, DAI_PB03_I);
+//	SRU(DIR_FS_O, DAI_PB03_I);
+    SRU(PCG_CLKB_O, DAI_PB03_I);
 	SRU(HIGH,PBEN03_I);
 	
 	//CSN
@@ -180,12 +184,13 @@ void initSRU() {
     // Connect frame sync to SRC0
     SRU(DAI_PB03_O, SRC0_FS_IP_I);
 
-    // Connect output clocks to SRC0
-    SRU(PCG_CLKA_O, SRC0_CLK_OP_I);		//BICK
 
-    SRU(PCG_CLKB_O, DAI_PB02_I);		//LRCK
-    SRU(HIGH, PBEN02_I);
-    SRU(DAI_PB02_O, SRC0_FS_OP_I);
+    // Connect output clocks to SRC0
+   SRU(PCG_CLKA_O, SRC0_CLK_OP_I);		//BICK
+
+   SRU(PCG_CLKB_O, DAI_PB02_I);		//LRCK
+   SRU(HIGH, PBEN02_I);
+   SRU(DAI_PB02_O, SRC0_FS_OP_I);
 
 	// SPORT0 receives from SPDIF
 	SRU(DIR_DAT_O, SPORT0_DA_I);
@@ -200,8 +205,8 @@ void initSRU() {
 	
 	//DEBUG SIGNALS//
 	
-	// LRCLK to debug, pin 11
-	SRU(DAI_PB03_O, DAI_PB11_I);
+	// PCG clock to debug, pin 11
+	SRU(DIR_TDMCLK_O, DAI_PB11_I);
 	SRU(HIGH, PBEN11_I);
 	// MOSI to debug
     SRU2(SPI_MOSI_O, DPI_PB09_I);
@@ -387,6 +392,10 @@ void initPCG(void)
 	//LRCK
 	*pPCG_CTLB1 = LRCK_DIVIDER;
 	*pPCG_CTLB0 = ENCLKB;
+
+    *pPCG_CTLC1 = MCLK_DIVIDER;
+    *pPCG_CTLC0 = ENCLKC;
+
 }
 
 void processSamples() {
@@ -395,10 +404,11 @@ void processSamples() {
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
 
-		rx0a_buf[dsp] ^= 0x80000000;
+        
 
+		rx0a_buf[dsp] ^= 0x80000000;
     	dsp = (dsp + 1)%512;
 	}
-
+    
     return;
 }
