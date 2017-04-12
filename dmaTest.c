@@ -26,7 +26,7 @@
 #define AK4396_CTRL1_RST   (0x06)
 
 // Default settings
-#define AK4396_CTRL1_DEF   (0x07)
+#define AK4396_CTRL1_DEF   (0x87)
 #define AK4396_CTRL2_DEF   (0x02)
 #define AK4396_CTRL3_DEF   (0x00)
 #define AK4396_LCH_ATT_DEF (0xFF)
@@ -45,7 +45,7 @@ void configureAK4396Register(unsigned int address, unsigned int data);
 void initDMA(void);
 void initSPDIF(void);
 void clearDAIpins(void);
-void initSRC(void);
+void initPCG(void);
 void processSamples(void);
 
 void delay(int times);
@@ -63,11 +63,15 @@ int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 				  IMx (source buffer step size),
 				  IIx (source buffer index (initialized to start address))       */
 int rx0a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
-int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
+int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 2, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
 
-int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
+int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH/2, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
 int dsp = 0;
+
+unsigned int mclk_divider = 9;
+unsigned int clkdiv = 160;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
+unsigned int fsdiv = 63;  // always?
 
 void main(void) {
 	initPLL_SDRAM();
@@ -124,6 +128,11 @@ void initSRU() {
 	SRU(LOW, PBEN12_I);
 	SRU(DAI_PB12_O, DIR_I);
 
+	//trigger the pcg??
+	SRU(SPORT1_FS_O, DAI_PB02_I);
+	SRU(HIGH, PBEN02_I);
+	SRU(DAI_PB02_O, PCG_SYNC_CLKA_I);
+
 	//Power off the DAC
 	SRU2(HIGH, DPI_PBEN04_I);
 	SRU2(LOW, DPI_PB04_I);
@@ -133,15 +142,18 @@ void initSRU() {
 	//Attach Main Clocks from SPDIF receiver
 	
 	//MCLK
-	SRU(DIR_TDMCLK_O, DAI_PB05_I);
+	// old way with spdif mclock SRU(DIR_TDMCLK_O, DAI_PB05_I);
+	SRU(PCG_FSA_O, DAI_PB05_I);
 	SRU(HIGH,PBEN05_I);
 	
 	//BICK
-	SRU(DIR_CLK_O, DAI_PB06_I);
+	// old way with spdif SRU(DIR_CLK_O, DAI_PB06_I);
+	SRU(SPORT1_CLK_O, DAI_PB06_I);
 	SRU(HIGH,PBEN06_I);
 	
 	//LRCK
-	SRU(DIR_FS_O, DAI_PB03_I);
+	// old way with spdif SRU(DIR_FS_O, DAI_PB03_I);
+	SRU(SPORT1_FS_O, DAI_PB03_I);
 	SRU(HIGH,PBEN03_I);
 	
 	//CSN
@@ -178,7 +190,7 @@ void initSRU() {
 	//DEBUG SIGNALS//
 	
 	// LRCLK to debug, pin 11
-	SRU(DAI_PB03_O, DAI_PB11_I);
+	SRU(SPORT1_FS_O, DAI_PB11_I);
 	SRU(HIGH, PBEN11_I);
 	// MOSI to debug
     SRU2(SPI_MOSI_O, DPI_PB09_I);
@@ -257,7 +269,7 @@ void initDMA() {
 
 	//comment back in to test sport talkthrough
 	rx0a_tcb[4] = *pCPSP0A = ((int) rx0a_tcb  + 7) & 0x7FFFF | (1<<19);
-	tx1a_tcb[4] = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
+	tx1a_tcb[4] = ((int) tx1a_delay_tcb  + 7) & 0x7FFFF | (1<<19);
 	tx1a_delay_tcb[4] = *pCPSP1A = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
 
 
@@ -266,7 +278,9 @@ void initDMA() {
 	*pSPCTL0 = OPMODE | L_FIRST | SLEN24 | SPEN_A | SCHEN_A | SDEN_A;
 
 	// SPORT1 as transmitter
-	*pSPCTL1 = OPMODE | L_FIRST | SLEN24 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN;			// Configure the SPORT control register
+	*pSPCTL1 = OPMODE | L_FIRST | SLEN24 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN | MSTR;			// Configure the SPORT control register
+
+	*pDIV1 = (clkdiv << 1) | (fsdiv << 16);
 }
 
 void delay(int times)
@@ -333,28 +347,20 @@ void clearDAIpins(void)
     SRU(LOW, PBEN20_I);
 }
 
-void initSRC(void)
+// Precision Clock Generator Initialization
+void initPCG(void)
 {
+	//CLKIN = 24.576 MHz (25MHz)
+		
+	// turn off the bit it said to turn off to enable external trigger thing
+	*pPCG_SYNC1 &= ~(0x01);
 
-  //============================================================
-    //
-    // Configure SRC Control Register (SRCCTL0).
-    //
-    //    SRC1_IN_I2S : SRC1 Serial Input Format= I2S mode
-    //    SRC1_OUT_I2S: SRC1 Serial Output Format= I2S mode
-    //    SRC1_OUT_24 : Output Word Length= 24 bits  
-    //------------------------------------------------------------
-
-
-	*pSRCCTL0 = SRC1_IN_I2S | SRC1_OUT_I2S | SRC1_OUT_24;
-
-	// Enable SRC1 in a different cycle than setting the configuration
-	*pSRCCTL0 |= SRC1_ENABLE;
+	//MCLK
+	*pPCG_CTLA0 = mclk_divider | ENFSA; // CLKADIV = 1, full 25 MHz
 }
 
 void processSamples() {
 
-	
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
 
