@@ -32,7 +32,7 @@
 #define AK4396_LCH_ATT_DEF (0xFF)
 #define AK4396_RCH_ATT_DEF (0xFF)
 
-#define BUFFER_LENGTH 512
+#define BUFFER_LENGTH 16384
 #define BUFFER_MASK 0x000000FF
 
 // Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
@@ -63,32 +63,36 @@ int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 				  IMx (source buffer step size),
 				  IIx (source buffer index (initialized to start address))       */
 int rx0a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
-int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 2, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
+int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
 
 int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH/2, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
 int dsp = 0;
 
-unsigned int mclk_divider = 9;
-unsigned int clkdiv = 160;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
+unsigned int mclk_divider = 2;
+unsigned int clkdiv = 35;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
 unsigned int fsdiv = 63;  // always?
 
 void main(void) {
 	initPLL_SDRAM();
 
 	initSPI(DS0EN);
-	initSRU();
 
-	configureAK4396Register(AK4396_CTRL2, AK4396_CTRL2_DEF);
-	delay(10);
+	initPCG();
+
+	initSRU();
 	
+
 	//Set the reset so that the device is ready to initialize registers.
 	configureAK4396Register(AK4396_CTRL1, AK4396_CTRL1_RST);
 	delay(10);
         	
     configureAK4396Register(AK4396_CTRL1, AK4396_CTRL1_DEF);
 	delay(10);
-	
+
+	configureAK4396Register(AK4396_CTRL2, AK4396_CTRL2_DEF);
+	delay(10);
+
 	configureAK4396Register(AK4396_CTRL3, AK4396_CTRL3_DEF);
 	delay(10);
 	
@@ -174,10 +178,10 @@ void initSRU() {
 
 	delay(10);
 
-	SRU(DAI_PB06_O, SPORT0_CLK_I);
-	SRU(DAI_PB06_O, SPORT1_CLK_I);
-	SRU(DAI_PB03_O, SPORT0_FS_I);
-	SRU(DAI_PB03_O, SPORT1_FS_I);
+	SRU(DIR_CLK_O, SPORT0_CLK_I);
+	//SRU(DAI_PB06_O, SPORT1_CLK_I);
+	SRU(DIR_FS_O, SPORT0_FS_I);
+	//SRU(DAI_PB03_O, SPORT1_FS_I);
 
 	// SPORT0 receives from SPDIF (comment back in to test talkthrough)
 	SRU(DIR_DAT_O, SPORT0_DA_I);
@@ -190,11 +194,11 @@ void initSRU() {
 	//DEBUG SIGNALS//
 	
 	// LRCLK to debug, pin 11
-	SRU(SPORT1_FS_O, DAI_PB11_I);
+	SRU(PCG_FSA_O, DAI_PB11_I);
 	SRU(HIGH, PBEN11_I);
 	// MOSI to debug
-    SRU2(SPI_MOSI_O, DPI_PB09_I);
-    SRU2(HIGH, DPI_PBEN09_I);
+    SRU2(SPORT1_FS_O, DAI_PB15_I);
+    SRU2(HIGH, PBEN15_I);
 
 }
 
@@ -357,6 +361,9 @@ void initPCG(void)
 
 	//MCLK
 	*pPCG_CTLA0 = mclk_divider | ENFSA; // CLKADIV = 1, full 25 MHz
+	//*pPCG_CTLA1 = mclk_divider;
+	//*pPCG_CTLA0 = ENCLKA;
+
 }
 
 void processSamples() {
