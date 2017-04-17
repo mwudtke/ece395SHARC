@@ -1,4 +1,4 @@
-/*****************************************************************************
+ /*****************************************************************************
  * dmaTest.c
  *****************************************************************************/
 
@@ -70,10 +70,16 @@ int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH/2, 1, (int) tx1a_buf_dumm
 int dsp = 0;
 
 unsigned int mclk_divider = 2;
-unsigned int clkdiv = 35;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
+unsigned int clkdiv = 49;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
 unsigned int fsdiv = 63;  // always?
 
 void main(void) {
+
+	unsigned int max = clkdiv + 10;
+	unsigned int min = clkdiv - 10;
+	int adj = 1;
+	unsigned int count = 0;
+
 	initPLL_SDRAM();
 
 	initSPI(DS0EN);
@@ -108,7 +114,26 @@ void main(void) {
 
 	/* stream the signal to the DAC forever */
 	while(1){
-		processSamples();
+		//processSamples();
+
+		/*
+		if (count == 150000) {
+
+			//printf("cldiv == %d\n",clkdiv);
+			if (clkdiv > max) 
+				adj = -1;
+			else if (clkdiv < min)
+				adj = 1; 
+
+			clkdiv = clkdiv + adj;
+		
+			*pDIV1 = (clkdiv << 1) | (fsdiv << 16);
+
+			count = 0;
+		}
+		
+		count++;
+		*/
 	}  
 }
 
@@ -373,7 +398,7 @@ void processSamples() {
 
 		rx0a_buf[dsp] ^= 0x80000000;
 
-    	dsp = (dsp + 1)%512;
+    	dsp = (dsp + 1)%BUFFER_LENGTH;
 	}
 
     return;
