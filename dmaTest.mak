@@ -38,7 +38,7 @@ ifeq ($(MAKECMDGOALS),dmaTest_Debug)
 
 dmaTest_Debug : ./Debug/dmaTest.dxe 
 
-Debug/dmaTest.doj :dmaTest.c $(VDSP)/214xx/include/Cdef21489.h $(VDSP)/214xx/include/signal.h $(VDSP)/214xx/include/stdio.h $(VDSP)/214xx/include/stdio_21xxx.h $(VDSP)/214xx/include/SRU.h $(VDSP)/214xx/include/sru21489.h $(VDSP)/214xx/include/def21489.h 
+Debug/dmaTest.doj :dmaTest.c $(VDSP)/214xx/include/Cdef21489.h $(VDSP)/214xx/include/signal.h $(VDSP)/214xx/include/stdio.h $(VDSP)/214xx/include/stdio_21xxx.h $(VDSP)/214xx/include/math.h $(VDSP)/214xx/include/math_21xxx.h $(VDSP)/214xx/include/SRU.h $(VDSP)/214xx/include/sru21489.h $(VDSP)/214xx/include/def21489.h 
 	@echo ".\dmaTest.c"
 	$(VDSP)/cc21k.exe -c .\dmaTest.c -file-attr ProjectName=dmaTest -g -structs-do-not-overlap -no-multiline -double-size-32 -swc -warn-protos -si-revision 0.2 -proc ADSP-21489 -o .\Debug\dmaTest.doj -MM
 

@@ -5,6 +5,7 @@
 #include <Cdef21489.h>
 #include <signal.h>
 #include <stdio.h>
+#include <math.h>
  
 // Check SRU Routings for errors.
 #define SRUDEBUG
@@ -32,8 +33,10 @@
 #define AK4396_LCH_ATT_DEF (0xFF)
 #define AK4396_RCH_ATT_DEF (0xFF)
 
-#define BUFFER_LENGTH 16384
+#define BUFFER_LENGTH 1024
 #define BUFFER_MASK 0x000000FF
+
+#define PI 3.141592653589793238462643
 
 // Configure the PLL for a core-clock of 266MHz and SDCLK of 133MHz
 extern void initPLL_SDRAM(void);
@@ -47,10 +50,14 @@ void initSPDIF(void);
 void clearDAIpins(void);
 void initPCG(void);
 void processSamples(void);
+void initWindow(void);
 
 void delay(int times);
 
 int rx0a_buf[BUFFER_LENGTH] = {0};		// SPORT0 receive buffer a - also used for transmission
+int process_buf1[BUFFER_LENGTH] = {0};
+int process_buf2[BUFFER_LENGTH] = {0};
+int output_buf[BUFFER_LENGTH] = {0};
 int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 /* TCB format:    ECx (length of destination buffer),
 				  EMx (destination buffer step size),
@@ -68,10 +75,12 @@ int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPOR
 int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH/2, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
 int dsp = 0;
+double hann_window[BUFFER_LENGTH];
 
 unsigned int mclk_divider = 2;
-unsigned int clkdiv = 49;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
+unsigned int clkdiv = 17;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
 unsigned int fsdiv = 63;  // always?
+
 
 void main(void) {
 
@@ -79,6 +88,8 @@ void main(void) {
 	unsigned int min = clkdiv - 10;
 	int adj = 1;
 	unsigned int count = 0;
+
+	initWindow();
 
 	initPLL_SDRAM();
 
@@ -396,10 +407,28 @@ void processSamples() {
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
 
-		rx0a_buf[dsp] ^= 0x80000000;
+		process_buf1[dsp] = rx0a_buf[dsp] * hann_window[dsp];
 
-    	dsp = (dsp + 1)%BUFFER_LENGTH;
+		int dsp2 = (dsp + BUFFER_LENGTH / 2) % BUFFER_LENGTH;
+
+		process_buf2[dsp] = rx0a_buf[dsp2] * hann_window[dsp2];
+
+		output_buf[dsp] = process_buf1[dsp] + process_buf2[dsp];
+
+		//maybe?
+		output_buf[dsp] ^= 0x80000000;
+
+    	dsp = (dsp + 1) % BUFFER_LENGTH;
 	}
 
     return;
+}
+
+/* initialize the hanning window */
+void initWindow ()
+{
+	int i;
+
+	for (i = 0; i < BUFFER_LENGTH; i++)
+	    hann_window[i] = 0.5 * (1 - cos( (2 * PI * i) / (BUFFER_LENGTH - 1) ));
 }
