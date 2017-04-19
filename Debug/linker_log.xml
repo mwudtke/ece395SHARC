@@ -1,8 +1,8 @@
 <?xml version="1.0" standalone="no"?>
 <?xml-stylesheet type="text/xsl" href="file:///C:/Program Files (x86)/Analog Devices/VisualDSP 5.1.2/System/linker_log.xsl"?>
-<DOCUMENT gen_time='Tue Apr 18 16:57:02 2017
+<DOCUMENT gen_time='Wed Apr 19 15:15:44 2017
 '>
-<MSG id='035370E0' mid='li3050' type='Informational' suppressed=''>
+<MSG id='039067D0' mid='li3050' type='Informational' suppressed=''>
 <TEXT><![CDATA[Input section(s) were excluded from output section 'seg_pmco']]></TEXT>
 <EXTENDED_INFO><![CDATA[The following input section(s) were excluded
     libc.dlb[set_args.doj](seg_pmco)

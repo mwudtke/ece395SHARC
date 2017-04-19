@@ -70,15 +70,15 @@ int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 				  IMx (source buffer step size),
 				  IIx (source buffer index (initialized to start address))       */
 int rx0a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
-int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
+int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) output_buf};				// SPORT1 transmit a tcb to DAC
 
 int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH/2, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
 int dsp = 0;
 double hann_window[BUFFER_LENGTH];
 
-unsigned int mclk_divider = 2;
-unsigned int clkdiv = 17;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
+unsigned int mclk_divider = 1;
+unsigned int clkdiv = 15;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
 unsigned int fsdiv = 63;  // always?
 
 
@@ -88,7 +88,7 @@ void main(void) {
 	unsigned int min = clkdiv - 10;
 	int adj = 1;
 	unsigned int count = 0;
-
+	
 	initWindow();
 
 	initPLL_SDRAM();
@@ -125,7 +125,7 @@ void main(void) {
 
 	/* stream the signal to the DAC forever */
 	while(1){
-		//processSamples();
+		processSamples();
 
 		/*
 		if (count == 150000) {
@@ -309,7 +309,7 @@ void initDMA() {
 
 	//comment back in to test sport talkthrough
 	rx0a_tcb[4] = *pCPSP0A = ((int) rx0a_tcb  + 7) & 0x7FFFF | (1<<19);
-	tx1a_tcb[4] = ((int) tx1a_delay_tcb  + 7) & 0x7FFFF | (1<<19);
+	tx1a_tcb[4] = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
 	tx1a_delay_tcb[4] = *pCPSP1A = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
 
 
@@ -412,12 +412,14 @@ void processSamples() {
 		int dsp2 = (dsp + BUFFER_LENGTH / 2) % BUFFER_LENGTH;
 
 		process_buf2[dsp] = rx0a_buf[dsp2] * hann_window[dsp2];
-
+		
 		output_buf[dsp] = process_buf1[dsp] + process_buf2[dsp];
 
-		//maybe?
-		output_buf[dsp] ^= 0x80000000;
+		//output_buf[dsp] = rx0a_buf[dsp];
 
+		//maybe?
+		//output_buf[dsp] ^= 0x80000000;
+		//rx0a_buf[dsp] ^= 0x80000000;
     	dsp = (dsp + 1) % BUFFER_LENGTH;
 	}
 
@@ -425,6 +427,7 @@ void processSamples() {
 }
 
 /* initialize the hanning window */
+
 void initWindow ()
 {
 	int i;
