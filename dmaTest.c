@@ -33,7 +33,7 @@
 #define AK4396_LCH_ATT_DEF (0xFF)
 #define AK4396_RCH_ATT_DEF (0xFF)
 
-#define BUFFER_LENGTH 1024
+#define BUFFER_LENGTH 2048
 #define BUFFER_MASK 0x000000FF
 
 #define PI 3.141592653589793238462643
@@ -84,8 +84,8 @@ unsigned int fsdiv = 63;  // always?
 
 void main(void) {
 
-	unsigned int max = clkdiv + 10;
-	unsigned int min = clkdiv - 10;
+	unsigned int max = clkdiv + 1;
+	unsigned int min = clkdiv - 1;
 	int adj = 1;
 	unsigned int count = 0;
 	
@@ -127,7 +127,9 @@ void main(void) {
 	while(1){
 		processSamples();
 
+		
 		/*
+		
 		if (count == 150000) {
 
 			//printf("cldiv == %d\n",clkdiv);
@@ -145,6 +147,7 @@ void main(void) {
 		
 		count++;
 		*/
+		
 	}  
 }
 
@@ -315,10 +318,10 @@ void initDMA() {
 
 	// SPORT0 as receiver (SPTRAN for testing square wave)
 	// OPMODE = I2S mode!
-	*pSPCTL0 = OPMODE | L_FIRST | SLEN24 | SPEN_A | SCHEN_A | SDEN_A;
+	*pSPCTL0 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A;
 
 	// SPORT1 as transmitter
-	*pSPCTL1 = OPMODE | L_FIRST | SLEN24 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN | MSTR;			// Configure the SPORT control register
+	*pSPCTL1 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN | MSTR;			// Configure the SPORT control register
 
 	*pDIV1 = (clkdiv << 1) | (fsdiv << 16);
 }
@@ -406,6 +409,8 @@ void processSamples() {
 
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
+		
+		
 
 		process_buf1[dsp] = rx0a_buf[dsp] * hann_window[dsp];
 
@@ -417,9 +422,6 @@ void processSamples() {
 
 		//output_buf[dsp] = rx0a_buf[dsp];
 
-		//maybe?
-		//output_buf[dsp] ^= 0x80000000;
-		//rx0a_buf[dsp] ^= 0x80000000;
     	dsp = (dsp + 1) % BUFFER_LENGTH;
 	}
 
