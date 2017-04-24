@@ -100,7 +100,7 @@ void main(void) {
 
 	/* stream the signal to the DAC forever */
 	while(1){
-		processSamples();
+		//processSamples();
 	}  
 }
 
@@ -354,13 +354,15 @@ void initSRC(void)
 
 void processSamples() {
 
+
+	
 	
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
 
-		rx0a_buf[dsp] ^= 0x80000000;
+		//rx0a_buf[dsp] ^= 0x80000000;
 
-    	dsp = (dsp + 1)%512;
+    	//dsp = (dsp + 1)%512;
 	}
 
     return;
