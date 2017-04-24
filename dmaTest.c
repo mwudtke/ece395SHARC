@@ -32,7 +32,7 @@
 #define AK4396_LCH_ATT_DEF (0xFF)
 #define AK4396_RCH_ATT_DEF (0xFF)
 
-#define BUFFER_LENGTH 512
+#define BUFFER_LENGTH 256
 #define BUFFER_MASK 0x000000FF
 
 #define DELAY_LENGTH 12000
@@ -66,7 +66,7 @@ int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 int rx0a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
 int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
 
-int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
+int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH/2, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
 int dsp = 0;
 int delay_ptr = 0;
@@ -265,10 +265,10 @@ void initDMA() {
 
 
 	// SPORT0 as receiver (SPTRAN for testing square wave)
-	*pSPCTL0 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A;
+	*pSPCTL0 = OPMODE | L_FIRST | SLEN24 | SPEN_A | SCHEN_A | SDEN_A;
 
 	// SPORT1 as transmitter
-	*pSPCTL1 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN;			// Configure the SPORT control register
+	*pSPCTL1 = OPMODE | L_FIRST | SLEN24 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN;			// Configure the SPORT control register
 }
 
 void delay(int times)
@@ -335,7 +335,6 @@ void clearDAIpins(void)
     SRU(LOW, PBEN20_I);
 }
 
-
 void processSamples() {
 
 	int tempInt = 0;
@@ -345,7 +344,7 @@ void processSamples() {
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
 
 		/* move to after the delay buffer filling for feedback delay */
-		delay_buffer[delay_ptr] = rx0a_buf[dsp];		// fill up the delay buffer
+		
 
 		/*  
 		delay_ptr is putting what rx just took in into the delay_buffer.
@@ -354,16 +353,18 @@ void processSamples() {
 		the desired delay time is satisfied constantly.
 		*/
 		delay_ptr = (delay_ptr + 1)%DELAY_LENGTH;
-		rx0a_buf[dsp] += delay_buffer[ delay_ptr ];
 
+		rx0a_buf[dsp] += 0.1*delay_buffer[ delay_ptr ];
+
+		delay_buffer[delay_ptr] = rx0a_buf[dsp];		// fill up the delay buffer
 		//temp = (float)rx0a_buf[dsp] + 0.5f*(float)delay_buffer[ (delay_ptr+1)%DELAY_LENGTH ];	
 		
 		//rx0a_buf[dsp] = (int)temp;
 
 		/* flip the bit to get the DAC working right */
-		rx0a_buf[dsp] ^= 0x80000000;
+		//rx0a_buf[dsp] ^= 0x80000000;
 
-    	dsp = (dsp + 1)%512;                            // increment the buffer_ptr
+    	dsp = (dsp + 1)%BUFFER_LENGTH;                            // increment the buffer_ptr
 	}
     return;
 }
