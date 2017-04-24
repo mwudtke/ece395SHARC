@@ -27,7 +27,7 @@
 #define AK4396_CTRL1_RST   (0x06)
 
 // Default settings
-#define AK4396_CTRL1_DEF   (0x87)
+#define AK4396_CTRL1_DEF   (0x05)
 #define AK4396_CTRL2_DEF   (0x02)
 #define AK4396_CTRL3_DEF   (0x00)
 #define AK4396_LCH_ATT_DEF (0xFF)
@@ -48,7 +48,6 @@ void configureAK4396Register(unsigned int address, unsigned int data);
 void initDMA(void);
 void initSPDIF(void);
 void clearDAIpins(void);
-void initPCG(void);
 void processSamples(void);
 void initWindow(void);
 
@@ -70,24 +69,14 @@ int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 				  IMx (source buffer step size),
 				  IIx (source buffer index (initialized to start address))       */
 int rx0a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
-int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) output_buf};				// SPORT1 transmit a tcb to DAC
+int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
 
 int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH/2, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
 int dsp = 0;
 double hann_window[BUFFER_LENGTH];
 
-unsigned int mclk_divider = 1;
-unsigned int clkdiv = 15;  // higher number == lower sample rate; vice versa. can get nicely arbitrary sample rates. GOT MATH?
-unsigned int fsdiv = 63;  // always?
-
-
 void main(void) {
-
-	unsigned int max = clkdiv + 1;
-	unsigned int min = clkdiv - 1;
-	int adj = 1;
-	unsigned int count = 0;
 	
 	initWindow();
 
@@ -95,19 +84,18 @@ void main(void) {
 
 	initSPI(DS0EN);
 
-	initPCG();
-
 	initSRU();
 	
-
 	//Set the reset so that the device is ready to initialize registers.
+	
+
+	configureAK4396Register(AK4396_CTRL2, AK4396_CTRL2_DEF);
+	delay(10);
+
 	configureAK4396Register(AK4396_CTRL1, AK4396_CTRL1_RST);
 	delay(10);
         	
     configureAK4396Register(AK4396_CTRL1, AK4396_CTRL1_DEF);
-	delay(10);
-
-	configureAK4396Register(AK4396_CTRL2, AK4396_CTRL2_DEF);
 	delay(10);
 
 	configureAK4396Register(AK4396_CTRL3, AK4396_CTRL3_DEF);
@@ -125,28 +113,7 @@ void main(void) {
 
 	/* stream the signal to the DAC forever */
 	while(1){
-		processSamples();
-
-		
-		/*
-		
-		if (count == 150000) {
-
-			//printf("cldiv == %d\n",clkdiv);
-			if (clkdiv > max) 
-				adj = -1;
-			else if (clkdiv < min)
-				adj = 1; 
-
-			clkdiv = clkdiv + adj;
-		
-			*pDIV1 = (clkdiv << 1) | (fsdiv << 16);
-
-			count = 0;
-		}
-		
-		count++;
-		*/
+		//processSamples();
 		
 	}  
 }
@@ -185,18 +152,15 @@ void initSRU() {
 	//Attach Main Clocks from SPDIF receiver
 	
 	//MCLK
-	// old way with spdif mclock SRU(DIR_TDMCLK_O, DAI_PB05_I);
-	SRU(PCG_FSA_O, DAI_PB05_I);
+	SRU(DIR_TDMCLK_O, DAI_PB05_I);
 	SRU(HIGH,PBEN05_I);
 	
 	//BICK
-	// old way with spdif SRU(DIR_CLK_O, DAI_PB06_I);
-	SRU(SPORT1_CLK_O, DAI_PB06_I);
+	SRU(DIR_CLK_O, DAI_PB06_I);
 	SRU(HIGH,PBEN06_I);
 	
 	//LRCK
-	// old way with spdif SRU(DIR_FS_O, DAI_PB03_I);
-	SRU(SPORT1_FS_O, DAI_PB03_I);
+	SRU(DIR_FS_O, DAI_PB03_I);
 	SRU(HIGH,PBEN03_I);
 	
 	//CSN
@@ -218,9 +182,9 @@ void initSRU() {
 	delay(10);
 
 	SRU(DIR_CLK_O, SPORT0_CLK_I);
-	//SRU(DAI_PB06_O, SPORT1_CLK_I);
+	SRU(DAI_PB06_O, SPORT1_CLK_I);
 	SRU(DIR_FS_O, SPORT0_FS_I);
-	//SRU(DAI_PB03_O, SPORT1_FS_I);
+	SRU(DAI_PB03_O, SPORT1_FS_I);
 
 	// SPORT0 receives from SPDIF (comment back in to test talkthrough)
 	SRU(DIR_DAT_O, SPORT0_DA_I);
@@ -321,9 +285,8 @@ void initDMA() {
 	*pSPCTL0 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A;
 
 	// SPORT1 as transmitter
-	*pSPCTL1 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN | MSTR;			// Configure the SPORT control register
+	*pSPCTL1 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN;			// Configure the SPORT control register
 
-	*pDIV1 = (clkdiv << 1) | (fsdiv << 16);
 }
 
 void delay(int times)
@@ -388,21 +351,6 @@ void clearDAIpins(void)
     SRU(LOW, PBEN18_I);
     SRU(LOW, PBEN19_I);
     SRU(LOW, PBEN20_I);
-}
-
-// Precision Clock Generator Initialization
-void initPCG(void)
-{
-	//CLKIN = 24.576 MHz (25MHz)
-		
-	// turn off the bit it said to turn off to enable external trigger thing
-	*pPCG_SYNC1 &= ~(0x01);
-
-	//MCLK
-	*pPCG_CTLA0 = mclk_divider | ENFSA; // CLKADIV = 1, full 25 MHz
-	//*pPCG_CTLA1 = mclk_divider;
-	//*pPCG_CTLA0 = ENCLKA;
-
 }
 
 void processSamples() {
