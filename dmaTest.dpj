@@ -124,6 +124,10 @@
 	<!-- Project folders -->
 	<folders>
 		<folder name="Header Files" ext=".h,.hpp,.hxx">
+			<files>
+				<file name=".\filter.h">
+				</file>
+			</files>
 		</folder>
 		<folder name="Linker Files" ext=".ldf,.dlb">
 		</folder>
