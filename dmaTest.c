@@ -52,6 +52,7 @@ void processSamples(void);
 
 void delay(int times);
 
+float stupid_buf[32] = {2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5};
 int rx0a_buf[BUFFER_LENGTH] = {0};		// SPORT0 receive buffer a - also used for transmission
 int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 int output_buf[BUFFER_LENGTH] = {0};
@@ -73,6 +74,7 @@ int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH/2, 1, (int) tx1a_buf_dumm
 int dsp = 0;
 int delay_ptr = 0;
 //int delay_buffer[2*DELAY_LENGTH] = {0};
+int trem_counter = 0;
 
 void main(void) {
 	initPLL_SDRAM();
@@ -341,7 +343,6 @@ void clearDAIpins(void)
 void processSamples() {
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
-		/*
 		int i;
 
 		float accumulate = 0;
@@ -352,17 +353,24 @@ void processSamples() {
 
 			if ((index = dsp - i) < 0)
 				index += BUFFER_LENGTH;
-
+	
 			accumulate += rx0a_buf[index] * filter[i];
 		}
 
 		output_buf[dsp] = accumulate;
-		*/
+		/*
+		int i;
+
 		output_buf[dsp] = 0.5 * rx0a_buf[dsp];
 
+		for (i = 0; i < 32; i++)
+		{
+			output_buf[dsp] *= stupid_buf[i];
+		}
+*/
 		output_buf[dsp] ^= 0x80000000;
 
-    	dsp = (dsp + 1)%BUFFER_LENGTH;                            // increment the buffer_ptr
+    	dsp = (dsp + 1) % BUFFER_LENGTH;                            // increment the buffer_ptr
 	}
     return;
 }
