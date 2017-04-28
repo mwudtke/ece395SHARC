@@ -341,6 +341,7 @@ void clearDAIpins(void)
 void processSamples() {
 
 	while( ( ((int)rx0a_buf + dsp) & BUFFER_MASK ) != ( *pIISP0A & BUFFER_MASK ) ) {
+		/*
 		int i;
 
 		float accumulate = 0;
@@ -354,14 +355,12 @@ void processSamples() {
 
 			accumulate += rx0a_buf[index] * filter[i];
 		}
-	
-/*
-		output_buf[dsp] = rx0a_buf[dsp];
 
-		if (output_buf[dsp] < 0)
-			output_buf[dsp] = 0;
-*/
 		output_buf[dsp] = accumulate;
+		*/
+		output_buf[dsp] = 0.5 * rx0a_buf[dsp];
+
+		output_buf[dsp] ^= 0x80000000;
 
     	dsp = (dsp + 1)%BUFFER_LENGTH;                            // increment the buffer_ptr
 	}
