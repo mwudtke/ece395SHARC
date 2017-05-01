@@ -352,19 +352,14 @@ void processSamples() {
 		already put there PLUS what's just ahead of where delay_ptr is now. this way, 
 		the desired delay time is satisfied constantly.
 		*/
+		delay_buffer[delay_ptr] = rx0a_buf[dsp];		// fill up the delay buffer
+
 		delay_ptr = (delay_ptr + 1)%DELAY_LENGTH;
 
-		rx0a_buf[dsp] += 0.1*delay_buffer[ delay_ptr ];
+		rx0a_buf[dsp] += delay_buffer[ delay_ptr ];
 
-		delay_buffer[delay_ptr] = rx0a_buf[dsp];		// fill up the delay buffer
-		//temp = (float)rx0a_buf[dsp] + 0.5f*(float)delay_buffer[ (delay_ptr+1)%DELAY_LENGTH ];	
-		
-		//rx0a_buf[dsp] = (int)temp;
-
-		/* flip the bit to get the DAC working right */
-		//rx0a_buf[dsp] ^= 0x80000000;
-
-    	dsp = (dsp + 1)%BUFFER_LENGTH;                            // increment the buffer_ptr
+    	dsp = (dsp + 1)%BUFFER_LENGTH;                  // increment the buffer_ptr
 	}
     return;
 }
+
