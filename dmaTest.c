@@ -32,8 +32,8 @@
 #define AK4396_LCH_ATT_DEF (0xFF)
 #define AK4396_RCH_ATT_DEF (0xFF)
 
-#define BUFFER_LENGTH 256
-#define BUFFER_MASK 0x000000FF
+#define BUFFER_LENGTH 1024
+#define BUFFER_MASK (BUFFER_LENGTH - 1)
 
 #define DELAY_LENGTH 12000
 
@@ -52,6 +52,7 @@ void processSamples(void);
 void delay(int times);
 
 int rx0a_buf[BUFFER_LENGTH] = {0};		// SPORT0 receive buffer a - also used for transmission
+int output_buf[BUFFER_LENGTH] = {0};
 int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 /* TCB format:    ECx (length of destination buffer),
 				  EMx (destination buffer step size),
@@ -64,7 +65,7 @@ int tx1a_buf_dummy[BUFFER_LENGTH/2] = {0};
 				  IMx (source buffer step size),
 				  IIx (source buffer index (initialized to start address))       */
 int rx0a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT0 receive a tcb from SPDIF
-int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) rx0a_buf};				// SPORT1 transmit a tcb to DAC
+int tx1a_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH, 1, (int) output_buf};				// SPORT1 transmit a tcb to DAC
 
 int tx1a_delay_tcb[8]  = {0, 0, 0, 0, 0, BUFFER_LENGTH/2, 1, (int) tx1a_buf_dummy};				// SPORT1 transmit a tcb to DAC
 
@@ -261,14 +262,14 @@ void initDMA() {
 	//comment back in to test sport talkthrough
 	rx0a_tcb[4] = *pCPSP0A = ((int) rx0a_tcb  + 7) & 0x7FFFF | (1<<19);
 	tx1a_tcb[4] = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
-	tx1a_delay_tcb[4] = *pCPSP1A = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
-
+	tx1a_delay_tcb[4] = ((int) tx1a_tcb  + 7) & 0x7FFFF | (1<<19);
+	*pCPSP1A = ((int) tx1a_delay_tcb  + 7) & 0x7FFFF | (1<<19);
 
 	// SPORT0 as receiver (SPTRAN for testing square wave)
-	*pSPCTL0 = OPMODE | L_FIRST | SLEN24 | SPEN_A | SCHEN_A | SDEN_A;
+	*pSPCTL0 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A;
 
 	// SPORT1 as transmitter
-	*pSPCTL1 = OPMODE | L_FIRST | SLEN24 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN;			// Configure the SPORT control register
+	*pSPCTL1 = OPMODE | L_FIRST | SLEN32 | SPEN_A | SCHEN_A | SDEN_A | SPTRAN;			// Configure the SPORT control register
 }
 
 void delay(int times)
@@ -352,12 +353,14 @@ void processSamples() {
 		already put there PLUS what's just ahead of where delay_ptr is now. this way, 
 		the desired delay time is satisfied constantly.
 		*/
-		delay_buffer[delay_ptr] = rx0a_buf[dsp];		// fill up the delay buffer
+
+		delay_buffer[delay_ptr] = 0.25*delay_buffer[delay_ptr] + 0.5*rx0a_buf[dsp];		// fill up the delay buffer
 
 		delay_ptr = (delay_ptr + 1)%DELAY_LENGTH;
 
-		rx0a_buf[dsp] += delay_buffer[ delay_ptr ];
+		output_buf[dsp] = delay_buffer[delay_ptr];
 
+		//output_buf[dsp] ^= 0x80000000;
     	dsp = (dsp + 1)%BUFFER_LENGTH;                  // increment the buffer_ptr
 	}
     return;
